@@ -7,6 +7,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#120a1f">
+<meta name="apple-mobile-web-app-title" content="Zombie Road">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <title>Zombie Road Co-op</title>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <style>
@@ -51,7 +55,9 @@ input.t.wide{width:min(80vw,420px);font-size:13px}
 .item button{font-size:13px;padding:7px 8px}
 .item.eq{border-color:#4ad84a}
 .sec{font-size:14px;color:#f5b025;text-align:left;margin:8px 2px 0}
-#sound{position:fixed;top:8px;right:8px;pointer-events:auto;font-size:18px;width:42px;height:42px;border-radius:50%;border:3px solid #000;background:#ffb21e;box-shadow:0 3px 0 #000;cursor:pointer;z-index:5;padding:0;line-height:1}
+#sound,#fsBtn{position:fixed;top:calc(8px + env(safe-area-inset-top));right:calc(8px + env(safe-area-inset-right));pointer-events:auto;font-size:18px;width:42px;height:42px;border-radius:50%;border:3px solid #000;background:#ffb21e;box-shadow:0 3px 0 #000;cursor:pointer;z-index:5;padding:0;line-height:1}
+#fsBtn{right:calc(58px + env(safe-area-inset-right));font-size:20px}
+#safe{position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 #rotate{position:fixed;inset:0;background:#120a1f;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:20;pointer-events:auto;text-align:center;padding:20px}
 #rotate .ph{font-size:60px;animation:rot 1.6s ease-in-out infinite}
 @keyframes rot{0%,30%{transform:rotate(0)}60%,100%{transform:rotate(90deg)}}
@@ -69,7 +75,7 @@ input.t.wide{width:min(80vw,420px);font-size:13px}
  #shop{padding:8px 10px} #shop .coins{font-size:18px} #shop .timer{font-size:14px}
  .grid{grid-template-columns:repeat(4,1fr);gap:5px;margin:4px 0}
  .item{padding:5px;border-width:2px;gap:3px} .item .n{font-size:11px} .item .d{display:none} .item button{font-size:11px;padding:5px 4px}
- .sec{font-size:11px;margin-top:4px} #sound{width:34px;height:34px;font-size:14px}
+ .sec{font-size:11px;margin-top:4px} #sound,#fsBtn{width:34px;height:34px;font-size:14px} #fsBtn{right:calc(48px + env(safe-area-inset-right))}
 }
 </style>
 </head>
@@ -86,6 +92,7 @@ input.t.wide{width:min(80vw,420px);font-size:13px}
         <button class="b green big" id="btnHost">Crea partita co-op</button>
         <button class="b blue" id="btnSolo">Giocatore singolo</button>
       </div>
+      <div class="row"><button class="b gray" id="btnFs">⛶ Schermo intero</button></div>
       <div class="row">
         <input id="roomIn" class="t" maxlength="8" placeholder="Codice stanza" style="width:160px;text-transform:uppercase">
         <button class="b" id="btnJoin">Entra</button>
@@ -142,6 +149,8 @@ input.t.wide{width:min(80vw,420px);font-size:13px}
   </div>
 </div>
 <button id="sound" title="Audio">🔊</button>
+<button id="fsBtn" title="Schermo intero">⛶</button>
+<div id="safe"></div>
 <div id="rotate"><div class="ph">📱</div><h2>Ruota il telefono</h2><div class="sub">Si gioca in orizzontale</div></div>
 <div id="toast"></div>
 <script>
@@ -1891,6 +1900,9 @@ function resize() {
   canvas.width = Math.round(cw * View.dpr); canvas.height = Math.round(ch * View.dpr);
   View.cssW = cw; View.cssH = ch; View.ox = (cw - View.W * View.scale) / 2; View.oyCss = (ch - View.H * View.scale) / 2;
   View.sky = null; View.vig = null;
+  // margini sicuri (notch / barra home su iPhone) in unità logiche
+  const cs = getComputedStyle($('safe')), sc = View.scale || 1;
+  View.safeL = (parseFloat(cs.paddingLeft) || 0) / sc; View.safeR = (parseFloat(cs.paddingRight) || 0) / sc; View.safeB = (parseFloat(cs.paddingBottom) || 0) / sc; View.safeT = (parseFloat(cs.paddingTop) || 0) / sc;
   $('rotate').style.display = isTouch() && ch > cw * 1.05 ? 'flex' : 'none';
 }
 function isTouch() { return Input.touchMode || ('ontouchstart' in window) || navigator.maxTouchPoints > 0; }
@@ -1917,7 +1929,7 @@ window.addEventListener('keyup', (e) => { Input.keys[e.code] = false; });
 window.addEventListener('blur', () => { Input.keys = {}; Input.mouse.fire = Input.mouse.melee = false; });
 function toLogical(e) { return { x: (e.clientX - View.ox) / View.scale, y: (e.clientY - View.oyCss) / View.scale }; }
 function touchLayout() {
-  const W = View.W, H = View.H;
+  const W = View.W - (View.safeR || 0), H = View.H - (View.safeB || 0) * 0.6;
   return {
     fire: { x: W - 108, y: H - 112, r: 64, label: 'FUOCO', col: '#ff4a3a' },
     melee: { x: W - 248, y: H - 76, r: 50, label: 'MISCHIA', col: '#ffb21e' },
@@ -2162,8 +2174,9 @@ function drawPlayerPanel(p, x, y) {
 function drawHUD() {
   const W = View.W, H = View.H;
   const ps = G.players;
-  if (ps[0]) drawPlayerPanel(ps[0], 10, 10);
-  if (ps[1]) drawPlayerPanel(ps[1], W - 252 - 60, 10);
+  const sl = View.safeL || 0, sr = View.safeR || 0, st = View.safeT || 0;
+  if (ps[0]) drawPlayerPanel(ps[0], 10 + sl, 10 + st);
+  if (ps[1]) drawPlayerPanel(ps[1], W - 252 - 104 - sr, 10 + st);
   // ondata e obiettivo
   const wv = G.wv || {};
   let obj = '';
@@ -2214,7 +2227,7 @@ function drawHUD() {
 }
 function drawTouch() {
   const lay = touchLayout(), J = Input.joy;
-  const jx = J.id !== null ? J.ox : 130, jy = J.id !== null ? J.oy : View.H - 120;
+  const jx = J.id !== null ? J.ox : 130 + (View.safeL || 0), jy = J.id !== null ? J.oy : View.H - 120 - (View.safeB || 0) * 0.6;
   ctx.globalAlpha = J.id !== null ? 0.5 : 0.25; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(jx, jy, 64, 0, TAU); ctx.fill();
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
   ctx.globalAlpha = J.id !== null ? 0.85 : 0.4; ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.arc(jx + J.vx * 52, jy + J.vy * 52, 28, 0, TAU); ctx.fill(); ctx.strokeStyle = '#000'; ctx.stroke();
@@ -2228,8 +2241,31 @@ function drawTouch() {
   ctx.globalAlpha = 1; ctx.lineWidth = 3;
 }
 
+// ------------------------------- SCHERMO INTERO -----------------------------
+function isFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+function isStandalone() { return navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches); }
+function fsFail() { toast('Lo schermo intero qui non è permesso: aggiungi il gioco alla schermata Home e aprilo da lì.', 5000); }
+function toggleFs() {
+  SFX.unlock(); const d = document, el = d.documentElement;
+  if (isIPhone) {
+    if (isStandalone()) { toast('Sei già a schermo intero', 2000); return; }
+    toast('Su iPhone: in Safari tocca Condividi → «Aggiungi alla schermata Home», poi apri il gioco dall\'icona: si apre a schermo intero.', 8000); return;
+  }
+  try {
+    if (isFs()) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
+    const f = el.requestFullscreen || el.webkitRequestFullscreen; if (!f) throw 0;
+    const r = f.call(el, { navigationUI: 'hide' });
+    const ok = () => { try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => { }); } catch (e) { } };
+    if (r && r.then) r.then(ok).catch(fsFail); else setTimeout(() => { if (isFs()) ok(); else fsFail(); }, 400);
+  } catch (e) { fsFail(); }
+}
+function updateFsButton() { const on = isFs() || (isIPhone && isStandalone()); $('fsBtn').classList.toggle('hidden', on && isIPhone); $('fsBtn').textContent = isFs() ? '✕' : '⛶'; $('btnFs').classList.toggle('hidden', on); }
+document.addEventListener('fullscreenchange', () => { updateFsButton(); setTimeout(resize, 60); });
+document.addEventListener('webkitfullscreenchange', () => { updateFsButton(); setTimeout(resize, 60); });
+
 // ------------------------------- UI / FLUSSO --------------------------------
-function toast(s) { const t = $('toast'); t.textContent = s; t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 2600); }
+function toast(s, ms) { const t = $('toast'); t.textContent = s; t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), ms || 2600); }
 const UI = {
   name: lsGet('zr_name', ''), skin: +lsGet('zr_skin', '0') || 0, room: null, shopSig: '', shopT: 0, overShown: false,
   panels: ['menu', 'lobby', 'shop', 'over', 'pause'],
@@ -2263,6 +2299,9 @@ const UI = {
     $('btnPauseMenu').onclick = () => this.backToMenu('');
     $('sound').onclick = (e) => { e.stopPropagation(); this.toggleMute(); };
     $('sound').textContent = SFX.muted ? '🔇' : '🔊';
+    $('fsBtn').onclick = (e) => { e.stopPropagation(); toggleFs(); };
+    $('btnFs').onclick = () => toggleFs();
+    updateFsButton();
     $('shop').addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b || b.disabled) return;
       SFX.unlock();
